@@ -1,4 +1,4 @@
-"""Local Daylight app server. API credentials remain in process memory, never in dist/."""
+"""Daylight hosted API. Owner credentials are read only from server environment."""
 import json, os, re, threading, time, urllib.request, urllib.error
 from datetime import date
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
@@ -48,19 +48,19 @@ def verify_connection(key,model):
 
 
 def analyze(data,key,model):
-    if not key:raise AppError('Connect an Groq API key using AI settings first.',503)
+    if not key:raise AppError('AI is temporarily unavailable. Please try again later.',503)
     text=data.get('text','')
-    if not isinstance(text,str) or not text.strip() or len(text)>12000:raise AppError('Enter between 1 and 12,000 characters.')
+    if not isinstance(text,str) or not text.strip() or len(text)>6000:raise AppError('Enter between 1 and 6,000 characters.')
     try:date.fromisoformat(data.get('today',''))
     except (ValueError,TypeError):raise AppError('The current date is missing or invalid. Refresh the app.')
     tz=data.get('timezone','local')
     if not isinstance(tz,str) or len(tz)>100:raise AppError('Invalid timezone.')
-    payload={'model':model,'messages':[{'role':'system','content':INSTRUCTIONS},{'role':'user','content':json.dumps({'local_date':data['today'],'timezone':tz,'brain_dump':text},ensure_ascii=False)}],'response_format':{'type':'json_schema','json_schema':{'name':'daylight_tasks','strict':True,'schema':SCHEMA}},'max_completion_tokens':7000}
+    payload={'model':model,'messages':[{'role':'system','content':INSTRUCTIONS},{'role':'user','content':json.dumps({'local_date':data['today'],'timezone':tz,'brain_dump':text},ensure_ascii=False)}],'response_format':{'type':'json_schema','json_schema':{'name':'daylight_tasks','strict':True,'schema':SCHEMA}},'max_completion_tokens':4500}
     req=urllib.request.Request('https://api.groq.com/openai/v1/chat/completions',data=json.dumps(payload).encode(),headers={'Authorization':'Bearer '+key,'Content-Type':'application/json','User-Agent':'Daylight/1.0'},method='POST')
     try:
         with urllib.request.urlopen(req,timeout=65) as response:result=json.load(response)
     except urllib.error.HTTPError as e:
-        messages={401:'The API key was rejected. Update it in AI settings.',403:'This API key does not have permission to use the selected model.',429:'The API quota or rate limit was reached. Check your API account and try again later.',400:'The AI request was rejected. Check the model in AI settings.',404:'The selected model is unavailable. Check the model in AI settings.'}
+        messages={401:'AI is temporarily unavailable. Please contact the app owner.',403:'This API key does not have permission to use the selected model.',429:'The API quota or rate limit was reached. Please try again later.',400:'The AI request was rejected. Please try again later.',404:'The selected model is unavailable. Please try again later.'}
         raise AppError(messages.get(e.code,'The AI service is temporarily unavailable. Please try again.'),502)
     except (urllib.error.URLError,TimeoutError):raise AppError('Could not reach the AI service. Check the connection and try again.',504)
     choices=result.get('choices',[])
@@ -89,7 +89,7 @@ class handler(BaseHTTPRequestHandler):
         parsed=urlparse(self.path)
         return parse_qs(parsed.query).get('action',[parsed.path.removeprefix('/api/')])[0]
     def do_GET(self):
-        if self.action()=='ai/status':return self.send_json({'configured':False,'verified':False,'provider':'Groq','model':'openai/gpt-oss-20b','mode':'session'})
+        if self.action()=='ai/status':return self.send_json({'configured':bool(os.environ.get('GROQ_API_KEY','').strip()),'provider':'Groq','mode':'included'})
         self.send_json({'error':'Not found.'},404)
     def do_POST(self):
         origin=urlparse(self.headers.get('Origin',''))
@@ -102,14 +102,11 @@ class handler(BaseHTTPRequestHandler):
             data=json.loads(self.rfile.read(length))
             if not isinstance(data,dict):raise AppError('Invalid request.')
             action=self.action()
-            if action=='ai/disconnect':return self.send_json({'configured':False})
-            key=data.pop('key','');model=data.pop('model','openai/gpt-oss-20b')
-            if not isinstance(key,str) or not re.fullmatch(r'[A-Za-z0-9_\-]{20,512}',key):raise AppError('Connect a Groq API key in AI settings first.',401)
-            if model not in ('openai/gpt-oss-20b','openai/gpt-oss-120b'):raise AppError('Select a supported model in AI settings.')
-            if action=='ai/config':
-                verify_connection(key,model)
-                return self.send_json({'configured':True,'verified':True,'provider':'Groq','mode':'session','model':model})
             if action!='quick-dump':raise AppError('Not found.',404)
+            if 'key' in data or 'model' in data:raise AppError('Unsupported request fields.')
+            key=os.environ.get('GROQ_API_KEY','').strip()
+            model='openai/gpt-oss-20b'
+            if not key:raise AppError('AI is temporarily unavailable. You can still use Basic split.',503)
             return self.send_json(analyze(data,key,model))
         except AppError as e:self.send_json({'error':e.message},e.status)
         except (ValueError,TypeError,UnicodeDecodeError):self.send_json({'error':'Invalid request.'},400)

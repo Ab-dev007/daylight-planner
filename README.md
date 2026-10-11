@@ -1,14 +1,14 @@
 # Daylight Planner
-Personal productivity app with Quick Dump, projects, a task board, date filters, daily review, and Groq-powered task extraction.
 
-## Deploy
-Import this private GitHub repository into Vercel. Framework preset: Other. The included vercel.json builds static assets and a Python API function. No API key belongs in this repository.
+Productivity planner with Quick Dump, projects, task board, date filters and daily review.
 
-## AI connection
-Open Quick Dump → AI settings. Enter your own active Groq key and verify the connection. The hosted app keeps the key only in tab memory, sends it over HTTPS for each request, and forgets it on refresh. No shared server API key is used. Supported models: openai/gpt-oss-20b and openai/gpt-oss-120b.
+## Deployment
+Import into Vercel with the Other preset. Set a sensitive Production environment variable `GROQ_API_KEY` to the owner's active Groq key and redeploy. Never commit credentials. No visitor key is required; all AI calls use the owner account through the Python server function. Visitors cannot change the model or key.
+
+## Costs and limits
+Uses openai/gpt-oss-20b. Each note is limited to 6,000 characters, 30 tasks, and 4,500 output tokens. These per-request limits are not a daily budget or rate limiter. The endpoint is public; configure provider spending limits and Vercel firewall rate limits before promoting widely. Same-origin checking is not authentication or abuse protection.
 
 ## Data
-Tasks are saved in browser localStorage and are not synced between browsers or domains. Download a backup from the local prototype, then import it into the deployed app. Gmail is manual paste/import only; no live Gmail connection is included.
+Tasks stay in each browser's localStorage, with backup export/import. They do not sync between devices. Initial tasks are examples. Gmail currently supports pasted email only.
 
-## Privacy
-The API does not log request bodies or keys. Task text is sent to Groq only after clicking Organise with AI. Provider infrastructure policies still apply. The initial tasks are sample data.
+AI sends note content to Groq after Organise with AI. Credentials stay server-side; the app does not log request bodies or keys.
